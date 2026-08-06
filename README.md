@@ -1,5 +1,7 @@
 # SELENE
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 **SELENE** is the standalone Android and Windows timeline collector for THEIA.
 It collects explicitly authorized, non-text device context locally and writes
 immutable snapshots for THEIA to import. Each platform has its own package,

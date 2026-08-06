@@ -1,5 +1,7 @@
 # SELENE
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 SELENE 是 THEIA 的独立时间线采集端，包含 Android 和 Windows 两个平台。
 它只在本地采集经过授权的非文本背景，并写成不可变快照供 THEIA 直接导入。
 SELENE 不读取聊天数据库，也不上传或解释聊天内容。
