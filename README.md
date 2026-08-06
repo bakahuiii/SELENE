@@ -26,6 +26,11 @@ permissions, filtering, data fields, and limitations. The Chinese guide is
 [WINDOWS_DESKTOP.md](docs/WINDOWS_DESKTOP.md) and
 [WINDOWS_DESKTOP.zh-CN.md](docs/WINDOWS_DESKTOP.zh-CN.md).
 
+For architecture, the immutable event contract, exact movement thresholds,
+THEIA import behavior, testing, and safe extension procedures, read the
+[Developer Guide](docs/DEVELOPER_GUIDE.md) or
+[Chinese Developer Guide](docs/DEVELOPER_GUIDE.zh-CN.md).
+
 ## Immutable Export Layout
 
 Every successful collection run creates a new directory in the folder selected
