@@ -1,0 +1,15 @@
+.gradle/
+.kotlin/
+.android-build/
+.idea/
+local.properties
+build/
+app/build/
+desktop/**/bin/
+desktop/**/obj/
+releases/**/staging/
+releases/**/published/
+releases/**/artifacts/
+*.apk
+*.zip
+*.iml

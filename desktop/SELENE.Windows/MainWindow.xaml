@@ -1,0 +1,80 @@
+<Window x:Class="Selene.Windows.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SELENE"
+        Width="710"
+        MinWidth="620"
+        Height="620"
+        MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <Grid Margin="28">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="16" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="16" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <StackPanel Grid.Row="0">
+        <TextBlock Text="SELENE" FontSize="28" FontWeight="SemiBold" Foreground="{StaticResource Accent}" />
+        <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" Foreground="#485465"
+                   Text="Windows 时间线采集器。它在本机记录前台应用时段、空闲时长、电源和网络状态，并写入 THEIA 可直接导入的不可变快照。" />
+      </StackPanel>
+
+      <Border Grid.Row="2" Padding="18" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6">
+        <StackPanel>
+          <TextBlock Text="导出目录" FontWeight="SemiBold" FontSize="16" />
+          <TextBlock Margin="0,5,0,10" Foreground="#667085" TextWrapping="Wrap"
+                     Text="每次采集会新建一个 SELENE-v1-时间戳 文件夹。不会覆盖、合并或修改已有快照。" />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="OutputDirectoryBox" IsReadOnly="True" VerticalContentAlignment="Center" Padding="8,5" />
+            <Button Grid.Column="1" Content="选择文件夹" Click="ChooseDirectory_Click" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="4" Padding="18" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6">
+        <StackPanel>
+          <TextBlock Text="自动采集" FontWeight="SemiBold" FontSize="16" />
+          <CheckBox x:Name="AutomaticCollectionBox" Content="在 SELENE 运行期间自动采集" Checked="SettingsChanged" Unchecked="SettingsChanged" />
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="150" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Text="采集间隔" />
+            <ComboBox x:Name="IntervalBox" Grid.Column="1" Margin="12,0,0,0" SelectionChanged="SettingsChanged">
+              <ComboBoxItem Content="5 分钟" Tag="5" />
+              <ComboBoxItem Content="15 分钟" Tag="15" />
+              <ComboBoxItem Content="30 分钟" Tag="30" />
+              <ComboBoxItem Content="60 分钟" Tag="60" />
+            </ComboBox>
+          </Grid>
+          <CheckBox x:Name="StartupBox" Content="登录 Windows 后启动 SELENE" Checked="SettingsChanged" Unchecked="SettingsChanged" />
+          <TextBlock Margin="0,8,0,0" Foreground="#667085" TextWrapping="Wrap"
+                     Text="应用关闭窗口后会继续驻留在系统托盘。任务栏右下角的 SELENE 图标可显示、立即采集或退出。" />
+        </StackPanel>
+      </Border>
+
+      <StackPanel Grid.Row="5" Margin="0,18,0,0">
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="CaptureButton" Content="立即采集" Click="CaptureNow_Click" />
+          <Button Content="退出 SELENE" Click="Exit_Click" />
+        </StackPanel>
+        <TextBlock x:Name="StatusText" Margin="0,12,0,0" Foreground="#344054" TextWrapping="Wrap" />
+        <Border Margin="0,16,0,0" Padding="12" Background="#FFF9E8" BorderBrush="#E9D39A" BorderThickness="1" CornerRadius="5">
+          <TextBlock TextWrapping="Wrap" Foreground="#665117"
+                     Text="隐私边界：SELENE 不读取窗口标题、网页内容、键盘输入、剪贴板、通知、聊天数据库、短信、通话、截图或支付记录。前台活动仅保留进程名和使用时段。" />
+        </Border>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</Window>
