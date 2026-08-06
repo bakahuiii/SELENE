@@ -299,9 +299,9 @@ flowchart TD
 ### Android
 
 ```powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-$env:ANDROID_HOME = 'H:\work\SELENE\.android-build\sdk'
-& 'H:\work\SELENE\.android-build\gradle-8.9\bin\gradle.bat' --no-daemon :app:lintDebug :app:assembleDebug
+$env:JAVA_HOME = '<JDK_17_HOME>'
+$env:ANDROID_HOME = '<ANDROID_SDK_HOME>'
+gradle --no-daemon :app:lintDebug :app:assembleDebug
 ```
 
 APK 位于 `app\build\outputs\apk\debug\app-debug.apk`。应处理新增 lint 错误，不要用大范围 suppression 掩盖 Android 框架已有的弃用提示。
