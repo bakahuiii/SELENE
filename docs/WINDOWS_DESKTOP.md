@@ -14,7 +14,7 @@ collection boundary visible and controllable to the user.
 
 ## First Run
 
-1. Extract the SELENE-0.2.0-windows-x64.zip archive to a normal user folder.
+1. Extract the SELENE-0.3.0-windows-x64.zip archive to a normal user folder.
 2. Run SELENE.Windows.exe.
 3. Choose a parent export folder. This can be the same folder used by Android
    SELENE, although each platform writes its own immutable snapshot directories.
@@ -39,6 +39,11 @@ context-events.json file. The Windows collector currently records:
 - whether a network is available and its coarse transport (wifi, ethernet, vpn,
   other, or none).
 
+Event timestamps use the Windows system timezone and ISO 8601 offset, such as
+`2026-08-06T22:54:39.123+08:00`. Snapshot directory names remain UTC for stable
+sorting. The JSON is compact UTF-8; SELENE reports the written byte count after
+each capture.
+
 The process name is the executable name such as chrome or devenv; SELENE does
 not read the window title, document name, URL, text, clipboard, or process
 arguments. Sessions shorter than five seconds are not emitted as individual
@@ -49,6 +54,9 @@ Windows SELENE does not currently read calendar databases, precise location,
 notification contents, or application-specific usage histories. Those sources
 remain platform-specific and are intentionally not approximated with
 unreliable scraping.
+
+For Android background movement tracking, including its separate permission
+and foreground-service boundary, see [ANDROID_MOVEMENT.md](ANDROID_MOVEMENT.md).
 
 ## Data and Privacy
 
@@ -78,7 +86,7 @@ The snapshot uses:
   "device": { "platform": "windows" },
   "producer": {
     "name": "SELENE",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "layout": "immutable-snapshot-v1"
   },
   "events": []
@@ -105,7 +113,7 @@ is stored under the current user's Run key and does not affect other users.
 ~~~powershell
 dotnet build desktop\SELENE.Windows\SELENE.Windows.csproj -c Release
 dotnet run --project desktop\SELENE.Windows.ContractTests\SELENE.Windows.ContractTests.csproj -c Release
-dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.2.0-windows-x64
+dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.3.0-windows-x64
 ~~~
 
 The contract test writes two snapshots using the same timestamp and asserts

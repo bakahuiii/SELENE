@@ -6,6 +6,7 @@ import android.provider.DocumentsContract
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -18,12 +19,15 @@ object ContextOutput {
     private const val outputTreeKey = "output-tree-uri"
     private val snapshotTimestamp = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssSSS'Z'")
         .withZone(ZoneOffset.UTC)
+    private val localTimestamp = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        .withZone(ZoneId.systemDefault())
 
     fun outputTreeUri(context: Context): Uri? = context
         .getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
         .getString(outputTreeKey, null)
         ?.let(Uri::parse)
 
+    @Synchronized
     fun writeEvents(context: Context, newEvents: List<JSONObject>): Int {
         val tree = outputTreeUri(context) ?: error("No output folder selected")
         val capturedAt = System.currentTimeMillis()
@@ -56,5 +60,6 @@ object ContextOutput {
         return newEvents.size
     }
 
-    fun iso(millis: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(millis))
+    /** Human-facing event times follow the device's current system timezone. */
+    fun iso(millis: Long): String = localTimestamp.format(Instant.ofEpochMilli(millis))
 }

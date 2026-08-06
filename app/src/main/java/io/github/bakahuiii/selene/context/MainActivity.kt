@@ -19,7 +19,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
-/** One-time configuration screen for the silent local WorkManager collector. */
+/** One-time configuration screen for the local timeline and movement collectors. */
 class MainActivity : Activity() {
     private val outputTreeKey = "output-tree-uri"
     private val requestOutputTree = 1001
@@ -27,7 +27,9 @@ class MainActivity : Activity() {
     private val requestLocation = 1003
     private val requestInitial = 1004
     private val requestBackground = 1005
+    private val requestNotifications = 1006
     private val initialPermissionGuidanceKey = "initial-permission-guidance-v1"
+    private val movementNotificationGuidanceKey = "movement-notification-guidance-v1"
     private lateinit var preferences: SharedPreferences
     private lateinit var status: TextView
     private var automaticToggle: Switch? = null
@@ -51,6 +53,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) {
+            syncMovementTracking()
             updateStatus()
             when (initialSettingsPage) {
                 InitialSettingsPage.BACKGROUND -> {
@@ -86,7 +89,7 @@ class MainActivity : Activity() {
 
         content.addView(sectionTitle("自动采集"))
         content.addView(TextView(this).apply {
-            text = "WorkManager 通常每小时运行一次，系统可能为了省电延后执行。缺少某项权限时只跳过该项，其它采集仍会继续。"
+            text = "日历、应用和设备快照通常每小时采集一次，系统可能为了省电延后执行。开启后台位置后，SELENE 会通过常驻通知持续判断移动并记录已确认的轨迹。"
             textSize = 13f
         })
         automaticToggle = Switch(this).apply {
@@ -99,7 +102,7 @@ class MainActivity : Activity() {
         }
         content.addView(automaticToggle)
         backgroundToggle = Switch(this).apply {
-            text = "允许后台读取新鲜的最近位置"
+            text = "允许后台持续记录移动轨迹和大致速度"
             isChecked = AutoCollectionSettings.backgroundLocationEnabled(this@MainActivity)
             setOnCheckedChangeListener { _, checked ->
                 if (synchronizingToggles) return@setOnCheckedChangeListener
@@ -185,6 +188,7 @@ class MainActivity : Activity() {
         }
         AutoCollectionSettings.setEnabled(this, true)
         AutoCollectionScheduler.start(this)
+        syncMovementTracking()
         if (!hasPermission(Manifest.permission.READ_CALENDAR)) {
             pendingPermission = PermissionFlow.CALENDAR
             requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), requestCalendar)
@@ -195,6 +199,7 @@ class MainActivity : Activity() {
     private fun disableAutomatic() {
         AutoCollectionSettings.setEnabled(this, false)
         AutoCollectionScheduler.stop(this)
+        syncMovementTracking()
         updateStatus()
     }
 
@@ -205,6 +210,7 @@ class MainActivity : Activity() {
             return
         }
         AutoCollectionSettings.setBackgroundLocationEnabled(this, true)
+        syncMovementTracking()
         if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
             pendingPermission = PermissionFlow.BACKGROUND_LOCATION
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), requestLocation)
@@ -216,6 +222,7 @@ class MainActivity : Activity() {
 
     private fun disableBackgroundLocation() {
         AutoCollectionSettings.setBackgroundLocationEnabled(this, false)
+        MovementTrackingService.stop(this)
         AutoCollectionSettings.setOnlinePlaceEnrichmentEnabled(this, false)
         onlinePlaceToggle?.isChecked = false
         updateStatus()
@@ -332,6 +339,31 @@ class MainActivity : Activity() {
     }
 
     private fun hasPermission(permission: String) = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun syncMovementTracking() {
+        val backgroundPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        val shouldRun = AutoCollectionSettings.isEnabled(this) &&
+            AutoCollectionSettings.backgroundLocationEnabled(this) &&
+            outputTreeUri() != null &&
+            hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
+            backgroundPermissionGranted
+        if (shouldRun) {
+            MovementTrackingService.start(this)
+            requestMovementNotificationPermissionIfNeeded()
+        } else {
+            MovementTrackingService.stop(this)
+        }
+    }
+
+    private fun requestMovementNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            hasPermission(Manifest.permission.POST_NOTIFICATIONS) ||
+            preferences.getBoolean(movementNotificationGuidanceKey, false)
+        ) return
+        preferences.edit().putBoolean(movementNotificationGuidanceKey, true).apply()
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), requestNotifications)
+    }
 
     private fun hasUsageAccess(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager

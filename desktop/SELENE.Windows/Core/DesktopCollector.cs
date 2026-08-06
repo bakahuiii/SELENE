@@ -2,22 +2,35 @@ namespace Selene.Windows.Core;
 
 public sealed class DesktopCollector
 {
-    private const string Version = "0.2.0";
+    private const string Version = "0.3.0";
     private readonly ForegroundSessionTracker foreground = new();
     private readonly ImmutableSnapshotWriter writer = new(Version);
+    private readonly SemaphoreSlim captureGate = new(1, 1);
     private DateTimeOffset? previousCaptureAt;
 
     public void ObserveForeground() => foreground.Observe();
 
-    public Task<SnapshotWriteResult> CaptureAsync(string exportDirectory) => Task.Run(() => Capture(exportDirectory));
+    public async Task<SnapshotWriteResult> CaptureAsync(string exportDirectory)
+    {
+        await captureGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() => Capture(exportDirectory)).ConfigureAwait(false);
+        }
+        finally
+        {
+            captureGate.Release();
+        }
+    }
 
     private SnapshotWriteResult Capture(string exportDirectory)
     {
-        var capturedAt = DateTimeOffset.UtcNow;
+        var capturedAt = DateTimeOffset.Now;
         var startAt = previousCaptureAt ?? capturedAt;
         if (startAt > capturedAt) startAt = capturedAt;
         var sessions = foreground.CutAndDrain(capturedAt);
-        previousCaptureAt = capturedAt;
+        try
+        {
         var events = new List<SeleneEvent>();
         var capturedAtIso = ImmutableSnapshotWriter.Iso(capturedAt);
         var startAtIso = ImmutableSnapshotWriter.Iso(startAt);
@@ -87,6 +100,14 @@ public sealed class DesktopCollector
             ImmutableSnapshotWriter.Iso(capturedAt)
         ));
 
-        return writer.WriteWindowsSnapshot(exportDirectory, events);
+        var result = writer.WriteWindowsSnapshot(exportDirectory, events);
+        previousCaptureAt = capturedAt;
+        return result;
+        }
+        catch
+        {
+            foreground.Restore(sessions);
+            throw;
+        }
     }
 }

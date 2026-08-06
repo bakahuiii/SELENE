@@ -4,7 +4,7 @@ namespace Selene.Windows.Core;
 
 public sealed class SettingsStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
     private readonly string settingsPath;
 
     public SettingsStore()

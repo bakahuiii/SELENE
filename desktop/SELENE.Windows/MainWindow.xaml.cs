@@ -82,7 +82,7 @@ public partial class MainWindow : Window
         try
         {
             var result = await collector.CaptureAsync(OutputDirectoryBox.Text);
-            StatusText.Text = $"已写入 {result.EventCount} 条事件：{result.SnapshotDirectory}";
+            StatusText.Text = $"已写入 {result.EventCount} 条事件（{FormatBytes(result.ByteCount)}）：{result.SnapshotDirectory}";
         }
         catch (Exception exception)
         {
@@ -133,6 +133,12 @@ public partial class MainWindow : Window
 
     private bool HasOutputDirectory() => !string.IsNullOrWhiteSpace(OutputDirectoryBox.Text)
         && Directory.Exists(OutputDirectoryBox.Text);
+
+    private static string FormatBytes(long value) => value < 1024
+        ? $"{value} B"
+        : value < 1024 * 1024
+            ? $"{value / 1024d:0.0} KB"
+            : $"{value / (1024d * 1024d):0.0} MB";
 
     private void UpdateStatus()
     {

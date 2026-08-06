@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -19,31 +20,32 @@ public sealed record SeleneEvent(
     [property: JsonPropertyName("endAt")] string? EndAt = null
 );
 
-public sealed record SnapshotWriteResult(string SnapshotDirectory, int EventCount);
+public sealed record SnapshotWriteResult(string SnapshotDirectory, int EventCount, long ByteCount);
 
 public sealed class ImmutableSnapshotWriter
 {
     public const string Schema = "selene-context-events/v1";
     private readonly string version;
-    private readonly Func<DateTimeOffset> utcNow;
+    private readonly Func<DateTimeOffset> now;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        WriteIndented = true,
+        WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public ImmutableSnapshotWriter(string version, Func<DateTimeOffset>? utcNow = null)
+    public ImmutableSnapshotWriter(string version, Func<DateTimeOffset>? now = null)
     {
         this.version = version;
-        this.utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        this.now = now ?? (() => DateTimeOffset.Now);
     }
 
     public SnapshotWriteResult WriteWindowsSnapshot(string exportRoot, IReadOnlyList<SeleneEvent> events)
     {
         if (string.IsNullOrWhiteSpace(exportRoot)) throw new ArgumentException("SELENE export folder is required.", nameof(exportRoot));
         Directory.CreateDirectory(exportRoot);
-        var generatedAt = utcNow().ToUniversalTime();
-        var snapshotDirectory = CreateSnapshotDirectory(exportRoot, generatedAt);
+        var generatedAt = now();
+        var snapshotDirectory = CreateSnapshotDirectory(exportRoot, generatedAt.ToUniversalTime());
         var document = new
         {
             schema = Schema,
@@ -58,8 +60,9 @@ public sealed class ImmutableSnapshotWriter
             JsonSerializer.Serialize(stream, document, JsonOptions);
             stream.Flush(flushToDisk: true);
         }
-        AppLogger.Info("snapshot_written", $"events={events.Count}; folder={Path.GetFileName(snapshotDirectory)}");
-        return new SnapshotWriteResult(snapshotDirectory, events.Count);
+        var byteCount = new FileInfo(target).Length;
+        AppLogger.Info("snapshot_written", $"events={events.Count}; bytes={byteCount}; folder={Path.GetFileName(snapshotDirectory)}");
+        return new SnapshotWriteResult(snapshotDirectory, events.Count, byteCount);
     }
 
     private static string CreateSnapshotDirectory(string exportRoot, DateTimeOffset generatedAt)
@@ -75,7 +78,8 @@ public sealed class ImmutableSnapshotWriter
         throw new IOException("Unable to allocate a new immutable SELENE snapshot directory.");
     }
 
-    public static string Iso(DateTimeOffset value) => value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+    /** Event timestamps retain the system's local offset; snapshot names stay UTC. */
+    public static string Iso(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
 
     public static string StableToken(string value)
     {

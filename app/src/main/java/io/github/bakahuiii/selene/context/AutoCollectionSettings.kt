@@ -88,5 +88,6 @@ object AutoCollectionScheduler {
     fun stop(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(periodicWorkName)
         WorkManager.getInstance(context).cancelUniqueWork(initialWorkName)
+        MovementTrackingService.stop(context)
     }
 }

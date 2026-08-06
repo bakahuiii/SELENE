@@ -16,8 +16,8 @@ public static class AppLogger
         {
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SELENE", "logs");
             Directory.CreateDirectory(root);
-            var path = Path.Combine(root, $"selene-{DateTime.UtcNow:yyyyMMdd}.log");
-            var line = $"{DateTimeOffset.UtcNow:O} [{level}] {eventName}{(string.IsNullOrWhiteSpace(detail) ? string.Empty : $" {detail}")}{Environment.NewLine}";
+            var path = Path.Combine(root, $"selene-{DateTime.Now:yyyyMMdd}.log");
+            var line = $"{DateTimeOffset.Now:O} [{level}] {eventName}{(string.IsNullOrWhiteSpace(detail) ? string.Empty : $" {detail}")}{Environment.NewLine}";
             lock (Sync) File.AppendAllText(path, line, Encoding.UTF8);
         }
         catch

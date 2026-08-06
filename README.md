@@ -9,6 +9,21 @@ or modifies THEIA files.
 SELENE does not read chat databases, notification contents, SMS, calls,
 keyboard input, payment history, screenshots, or other-application databases.
 
+## Platforms
+
+- **Android 0.3.0** collects screen use, foreground app sessions, calendar,
+  device and network snapshots. With explicit background-location consent, it
+  also records confirmed continuous movement, sampled speed, and a fresh
+  location fallback for place context.
+- **Windows 0.3.0** collects foreground process sessions, idle time, power
+  state, and network transport while the tray application is running.
+
+See [Android movement tracking](docs/ANDROID_MOVEMENT.md) for Android setup,
+permissions, filtering, data fields, and limitations. The Chinese guide is
+[ANDROID_MOVEMENT.zh-CN.md](docs/ANDROID_MOVEMENT.zh-CN.md). Windows guides:
+[WINDOWS_DESKTOP.md](docs/WINDOWS_DESKTOP.md) and
+[WINDOWS_DESKTOP.zh-CN.md](docs/WINDOWS_DESKTOP.zh-CN.md).
+
 ## Immutable Export Layout
 
 Every successful collection run creates a new directory in the folder selected
@@ -35,7 +50,7 @@ required producer marker:
 {
   "producer": {
     "name": "SELENE",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "layout": "immutable-snapshot-v1"
   }
 }
@@ -58,8 +73,9 @@ $env:ANDROID_HOME = 'H:\work\SELENE\.android-build\sdk'
 & 'H:\work\SELENE\.android-build\gradle-8.9\bin\gradle.bat' --no-daemon lintDebug assembleDebug
 ```
 
-The Android application is `0.2.0`. See
-[EXPORT_LAYOUT.md](docs/EXPORT_LAYOUT.md) for the data contract.
+The Android application is `0.3.0`. See
+[EXPORT_LAYOUT.md](docs/EXPORT_LAYOUT.md) for the data contract and
+[EXPORT_LAYOUT.zh-CN.md](docs/EXPORT_LAYOUT.zh-CN.md) for its Chinese version.
 
 ## Windows Build
 
@@ -70,7 +86,7 @@ dependencies.
 ~~~powershell
 dotnet build desktop\SELENE.Windows\SELENE.Windows.csproj -c Release
 dotnet run --project desktop\SELENE.Windows.ContractTests\SELENE.Windows.ContractTests.csproj -c Release
-dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.2.0-windows-x64
+dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.3.0-windows-x64
 ~~~
 
 The Windows collector records only foreground process names and bounded usage
@@ -85,4 +101,5 @@ databases, screenshots, or payment history. See
 The Windows package is self-contained for x64 Windows. The Android package is
 debug-signed until a release-signing key is managed outside the repository.
 The repeatable build, validation, checksum, and GitHub Release procedure is in
-[RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
+[RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) and
+[RELEASE_PROCESS.zh-CN.md](docs/RELEASE_PROCESS.zh-CN.md).

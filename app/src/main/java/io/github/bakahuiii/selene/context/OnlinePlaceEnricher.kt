@@ -12,7 +12,7 @@ import java.util.Locale
  */
 object OnlinePlaceEnricher {
     private const val endpoint = "https://nominatim.openstreetmap.org/reverse"
-    private const val userAgent = "SELENE/0.2.0 (+https://github.com/bakahuiii/SELENE)"
+    private const val userAgent = "SELENE/0.3.0 (+https://github.com/bakahuiii/SELENE)"
 
     fun resolve(observation: PlaceTagger.Observation): String? = runCatching {
         val requestUri = Uri.parse(endpoint).buildUpon()

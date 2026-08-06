@@ -13,7 +13,7 @@ SELENE Windows 是一个原生 WPF 托盘程序，在当前 Windows 用户会话
 
 ## 第一次使用
 
-1. 将 SELENE-0.2.0-windows-x64.zip 解压到普通用户目录。
+1. 将 SELENE-0.3.0-windows-x64.zip 解压到普通用户目录。
 2. 启动 SELENE.Windows.exe。
 3. 选择一个导出父目录。它可以和 Android SELENE 使用同一个父目录，
    两个平台会分别创建自己的不可变快照。
@@ -36,6 +36,10 @@ context-events.json。Windows 版当前记录：
 - Windows 能报告时的电池百分比、充电和交流电状态；
 - 网络是否可用及粗粒度传输类型：wifi、ethernet、vpn、other 或 none。
 
+事件时间戳使用 Windows 系统时区和 ISO 8601 偏移，例如
+`2026-08-06T22:54:39.123+08:00`；快照目录名仍使用 UTC 以保证稳定排序。JSON
+采用紧凑 UTF-8 编码，SELENE 会在每次采集完成后显示写入字节数。
+
 进程名是 chrome、devenv 这类可执行文件名。SELENE 不读取窗口标题、
 文档名、网址、文本、剪贴板、命令行参数、键盘、通知、聊天数据库、截图
 或支付记录。短于 5 秒的会话不会单独输出，但如果已经在采样窗口内观察到，
@@ -43,6 +47,9 @@ context-events.json。Windows 版当前记录：
 
 Windows 版暂不读取日历数据库、精确位置、通知正文或应用内部使用历史。
 这些数据源应由拥有明确权限的专用适配器接入，不通过不可靠的抓取模拟。
+
+Android 的后台持续运动记录使用独立的权限和前台服务边界，详见
+[ANDROID_MOVEMENT.zh-CN.md](ANDROID_MOVEMENT.zh-CN.md)。
 
 ## 数据与隐私
 
@@ -70,7 +77,7 @@ Windows 版暂不读取日历数据库、精确位置、通知正文或应用内
   "device": { "platform": "windows" },
   "producer": {
     "name": "SELENE",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "layout": "immutable-snapshot-v1"
   },
   "events": []
@@ -94,7 +101,7 @@ THEIA 接收的是粗粒度模型投影。其他 SELENE 平台本地可能存在
 ~~~powershell
 dotnet build desktop\SELENE.Windows\SELENE.Windows.csproj -c Release
 dotnet run --project desktop\SELENE.Windows.ContractTests\SELENE.Windows.ContractTests.csproj -c Release
-dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.2.0-windows-x64
+dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.3.0-windows-x64
 ~~~
 
 契约测试会使用同一个时间戳写入两次快照，确认目录不同，并确认第一次

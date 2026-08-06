@@ -1,7 +1,9 @@
 # SELENE Release Process
 
-Each SELENE version is built into a new, immutable local release directory and
+Each SELENE release is built into a new, immutable local release directory and
 then attached to a GitHub Release. Release files are not committed to Git.
+Choose one release version and align the Android `versionName`/`versionCode`
+and Windows assembly version before packaging both platforms.
 
 ## Prerequisites
 
@@ -21,10 +23,11 @@ From the repository root, run:
 
 ~~~powershell
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-.\tools\prepare-release.ps1 -Version 0.2.0
+.\tools\prepare-release.ps1 -Version 0.3.0
 ~~~
 
-The command refuses to reuse `releases\v0.2.0`. This protects an earlier local
+Pass `-Version` explicitly. The command refuses to reuse its matching
+`releases\v<version>` directory. This protects an earlier local
 staging directory from accidental overwrite. It performs the following checks:
 
 1. Android debug lint and APK build.
@@ -39,11 +42,11 @@ Artifacts are placed here:
 
 ```text
 releases/
-  v0.2.0/
+  v0.3.0/
     published/windows-x64/       # unpacked self-contained Windows output
     artifacts/
-      SELENE-0.2.0-windows-x64.zip
-      SELENE-0.2.0-android-debug.apk
+      SELENE-0.3.0-windows-x64.zip
+      SELENE-0.3.0-android-debug.apk
       SHA256SUMS.txt
 ```
 
@@ -63,6 +66,10 @@ repository. Its name states that fact explicitly.
    payment history, or other-application databases.
 6. Download one attached artifact and check its SHA-256 against the attached
    checksum file before announcing the release.
+7. For Android releases with movement tracking, state that users must select
+   precise location and "Allow all the time" before a confirmed track can be
+   collected. Notification permission makes the foreground-service state
+   visible but does not grant location access.
 
 Use the release notes to identify the supported schema
 `selene-context-events/v1`, so users know that THEIA imports only SELENE's

@@ -22,10 +22,8 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import org.json.JSONObject
 import java.security.MessageDigest
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * Periodic, local-only collection. Each collector is permission-aware so a
@@ -233,7 +231,11 @@ class AutoContextWorker(appContext: Context, params: WorkerParameters) : Worker(
                 .maxByOrNull(Location::getTime)
         }.getOrNull() ?: return null
         val ageMillis = (now - location.time).coerceAtLeast(0)
-        if (ageMillis > 2 * 60 * 60_000L) return null
+        // The foreground movement service owns continuous tracking. This hourly
+        // worker is only a fresh-place fallback when that service was stopped or
+        // temporarily unable to obtain a fix; never turn an old cached point
+        // into a movement observation.
+        if (ageMillis > 30 * 60_000L) return null
         val consentAt = AutoCollectionSettings.backgroundLocationConsentAt(applicationContext)
         val observation = PlaceTagger.observe(applicationContext, location)
         val placeTag = if (
@@ -254,9 +256,10 @@ class AutoContextWorker(appContext: Context, params: WorkerParameters) : Worker(
             kind = "location",
             startAt = iso(location.time),
             endAt = null,
-            title = "Background location observation",
+            title = "Latest location fallback",
             values = JSONObject()
-                .put("sampleMode", "passive-last-known")
+                .put("sampleMode", "last-known-fallback")
+                .put("movementTracking", "foreground-service")
                 .put("ageSeconds", (ageMillis / 1_000).toInt())
                 .put("placeTag", placeTag),
         ).apply {
@@ -338,9 +341,8 @@ class AutoContextWorker(appContext: Context, params: WorkerParameters) : Worker(
             .put("title", title)
             .put("values", values)
             .put("capturedAt", capturedAt)
-            .put("importedAt", capturedAt)
             .put("privacy", "coarse")
     }
 
-    private fun iso(millis: Long) = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(millis))
+    private fun iso(millis: Long) = ContextOutput.iso(millis)
 }
