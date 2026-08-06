@@ -1,112 +1,56 @@
 # SELENE
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[简体中文](README.md) | [English](README.en.md)
 
-**SELENE** is the standalone Android and Windows timeline collector for THEIA.
-It collects explicitly authorized, non-text device context locally and writes
-immutable snapshots for THEIA to import. Each platform has its own package,
-settings, scheduler, and export directory; neither platform depends on, reads,
-or modifies THEIA files.
+开发、扩展 Android/Windows 采集器、修改运动阈值或事件协议前，请先阅读
+[开发者指南](docs/DEVELOPER_GUIDE.zh-CN.md)；英文版为
+[Developer Guide](docs/DEVELOPER_GUIDE.md)。
 
-SELENE does not read chat databases, notification contents, SMS, calls,
-keyboard input, payment history, screenshots, or other-application databases.
+SELENE 是 THEIA 的独立时间线采集端，包含 Android 和 Windows 两个平台。
+它只在本地采集经过授权的非文本背景，并写成不可变快照供 THEIA 直接导入。
+SELENE 不读取聊天数据库，也不上传或解释聊天内容。
 
-## Platforms
+## 平台
 
-- **Android 0.3.0** collects screen use, foreground app sessions, calendar,
-  device and network snapshots. With explicit background-location consent, it
-  also records confirmed continuous movement, sampled speed, and a fresh
-  location fallback for place context.
-- **Windows 0.3.0** collects foreground process sessions, idle time, power
-  state, and network transport while the tray application is running.
+- Android：采集屏幕使用、前台应用时段、日历、设备状态、网络状态和可选
+  的后台持续移动轨迹、速度与最近位置兜底。
+- Windows：采集 SELENE 运行期间的前台进程名及使用时段、空闲时长、电源
+  与网络状态。
 
-See [Android movement tracking](docs/ANDROID_MOVEMENT.md) for Android setup,
-permissions, filtering, data fields, and limitations. The Chinese guide is
-[ANDROID_MOVEMENT.zh-CN.md](docs/ANDROID_MOVEMENT.zh-CN.md). Windows guides:
-[WINDOWS_DESKTOP.md](docs/WINDOWS_DESKTOP.md) and
-[WINDOWS_DESKTOP.zh-CN.md](docs/WINDOWS_DESKTOP.zh-CN.md).
+两个平台都使用 selene-context-events/v1，每次采集都会创建新的：
 
-For architecture, the immutable event contract, exact movement thresholds,
-THEIA import behavior, testing, and safe extension procedures, read the
-[Developer Guide](docs/DEVELOPER_GUIDE.md) or
-[Chinese Developer Guide](docs/DEVELOPER_GUIDE.zh-CN.md).
-
-## Immutable Export Layout
-
-Every successful collection run creates a new directory in the folder selected
-through Android's system folder picker:
-
-```text
-selected-export-folder/
-  SELENE-v1-20260806T185439123Z/
-    context-events.json
-  SELENE-v1-20260806T195441876Z/
-    context-events.json
-```
-
-The directory name contains both the layout version (`v1`) and the UTC creation
-timestamp (`yyyyMMddTHHmmssSSSZ`). `context-events.json` is written once.
-SELENE never opens, merges, rewrites, or deletes an older snapshot directory or
-JSON file. Duplicate event IDs across snapshots are expected after retries;
-THEIA deduplicates them during import.
-
-Every export uses the strict `selene-context-events/v1` contract and includes a
-required producer marker:
-
-```json
-{
-  "producer": {
-    "name": "SELENE",
-    "version": "0.3.0",
-    "layout": "immutable-snapshot-v1"
-  }
-}
-```
-
-THEIA's connected-directory import already scans subdirectories recursively, so
-choose the parent `selected-export-folder`, not an individual snapshot.
-
-THEIA imports only this SELENE contract. SELENE never reads, converts, or
-modifies earlier files.
-
-## Build
-
-Requirements: Android SDK Platform 35 and JDK 17. The prepared Android build
-toolchain is stored with SELENE under `H:\work\SELENE\.android-build`.
-
-```powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-$env:ANDROID_HOME = 'H:\work\SELENE\.android-build\sdk'
-& 'H:\work\SELENE\.android-build\gradle-8.9\bin\gradle.bat' --no-daemon lintDebug assembleDebug
-```
-
-The Android application is `0.3.0`. See
-[EXPORT_LAYOUT.md](docs/EXPORT_LAYOUT.md) for the data contract and
-[EXPORT_LAYOUT.zh-CN.md](docs/EXPORT_LAYOUT.zh-CN.md) for its Chinese version.
-
-## Windows Build
-
-Requirements: Windows 10 22H2 or Windows 11 x64 and .NET SDK 9.0. The Windows
-collector is a native WPF application and has no third-party runtime
-dependencies.
-
-~~~powershell
-dotnet build desktop\SELENE.Windows\SELENE.Windows.csproj -c Release
-dotnet run --project desktop\SELENE.Windows.ContractTests\SELENE.Windows.ContractTests.csproj -c Release
-dotnet publish desktop\SELENE.Windows\SELENE.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o releases\SELENE-0.3.0-windows-x64
+~~~text
+SELENE-v1-20260806T185439123Z/context-events.json
 ~~~
 
-The Windows collector records only foreground process names and bounded usage
-sessions, idle time, power state, and network transport. It does not collect
-window titles, web content, keystrokes, clipboard data, notifications, chat
-databases, screenshots, or payment history. See
-[WINDOWS_DESKTOP.md](docs/WINDOWS_DESKTOP.md) and
-[WINDOWS_DESKTOP.zh-CN.md](docs/WINDOWS_DESKTOP.zh-CN.md).
+旧快照永远不会被打开、合并、改写或删除。THEIA 请选择这些快照的父目录。
 
-## Release Artifacts
+## Android 持续运动记录
 
-The Windows package is self-contained for x64 Windows. The Android package is
-debug-signed until a release-signing key is managed outside the repository.
-The repeatable build, validation, checksum, and GitHub Release procedure is in
-[RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) and
-[RELEASE_PROCESS.zh-CN.md](docs/RELEASE_PROCESS.zh-CN.md).
+Android `0.3.0` 在开启自动采集和后台位置后，会使用前台定位服务记录已经确认的
+持续移动。它会输出轨迹点、各点的大致速度、距离和一次行程汇总；室内走几步、
+单个噪声点、陈旧位置、低精度定位和不合理跳点不会作为移动导出。
+
+完整的开通步骤、权限、过滤规则、字段、隐私边界、耗电与重启限制见
+[Android 持续运动记录](docs/ANDROID_MOVEMENT.zh-CN.md)。英文版见
+[ANDROID_MOVEMENT.md](docs/ANDROID_MOVEMENT.md)。导出协议中英文对照见
+[EXPORT_LAYOUT.md](docs/EXPORT_LAYOUT.md) 和
+[EXPORT_LAYOUT.zh-CN.md](docs/EXPORT_LAYOUT.zh-CN.md)。
+
+## Windows 快速开始
+
+1. 解压 SELENE-0.3.0-windows-x64.zip。
+2. 运行 SELENE.Windows.exe。
+3. 选择导出父目录。
+4. 开启自动采集并选择周期。
+5. 关闭窗口后程序会停留在系统托盘；需要完全退出时使用托盘菜单。
+
+Windows 版无需管理员权限，发布版也不需要另装 .NET。详细说明见
+Windows 桌面版文档：docs/WINDOWS_DESKTOP.zh-CN.md。
+
+## Android 构建
+
+构建 Android 版需要 Android SDK Platform 35、JDK 17 与 Gradle 8.9 或兼容版本。
+请在本机配置 `JAVA_HOME`、`ANDROID_HOME` 和 Gradle 后执行构建；完整发布步骤见
+[RELEASE_PROCESS.zh-CN.md](docs/RELEASE_PROCESS.zh-CN.md)，英文版见
+[RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)。
