@@ -13,11 +13,14 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.zxing.integration.android.IntentIntegrator
+import com.google.zxing.integration.android.IntentResult
 
 /** One-time configuration screen for the local timeline and movement collectors. */
 class MainActivity : Activity() {
@@ -32,6 +35,7 @@ class MainActivity : Activity() {
     private val movementNotificationGuidanceKey = "movement-notification-guidance-v1"
     private lateinit var preferences: SharedPreferences
     private lateinit var status: TextView
+    private lateinit var pairingStatus: TextView
     private var automaticToggle: Switch? = null
     private var backgroundToggle: Switch? = null
     private var onlinePlaceToggle: Switch? = null
@@ -46,6 +50,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         preferences = getSharedPreferences("SELENE", Context.MODE_PRIVATE)
         setContentView(createView())
+        if (PairingManager.isPaired(this)) SyncthingService.start(this)
         updateStatus()
         window.decorView.post { requestInitialPermissionsIfNeeded() }
     }
@@ -53,6 +58,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) {
+            if (PairingManager.isPaired(this)) SyncthingService.start(this)
             syncMovementTracking()
             updateStatus()
             when (initialSettingsPage) {
@@ -83,6 +89,20 @@ class MainActivity : Activity() {
         })
         status = TextView(this).apply { textSize = 14f; setPadding(0, 0, 0, padding) }
         content.addView(status)
+
+        content.addView(sectionTitle("远程同步"))
+        content.addView(TextView(this).apply {
+            text = "扫描 Windows SELENE 显示的一次性二维码，或粘贴配对码。配对只在同一局域网进行一次；之后快照由内置 Syncthing 自动跨网络同步。"
+            textSize = 13f
+        })
+        pairingStatus = TextView(this).apply {
+            textSize = 13f
+            setPadding(0, padding / 3, 0, padding / 3)
+        }
+        content.addView(pairingStatus)
+        content.addView(button("扫描 Windows 配对二维码") { scanPairingCode() })
+        content.addView(button("输入 Windows 配对码") { enterPairingCode() })
+        content.addView(button("解除配对（保留本地快照）") { resetPairing() })
 
         content.addView(sectionTitle("存储"))
         content.addView(button("选择 SELENE 导出文件夹") { chooseOutputFolder() })
@@ -159,7 +179,11 @@ class MainActivity : Activity() {
     }
 
     private fun updateStatus() {
-        val folder = if (outputTreeUri() == null) "未选择" else "已选择"
+        val folder = when {
+            PairingManager.isPaired(this) -> "已配对（应用私有同步目录）"
+            outputTreeUri() == null -> "未选择"
+            else -> "已选择"
+        }
         val calendar = if (hasPermission(Manifest.permission.READ_CALENDAR)) "已授权" else "未授权"
         val location = if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) "已授权" else "未授权"
         val usage = if (hasUsageAccess()) "已授权" else "未授权（需在系统设置打开）"
@@ -172,6 +196,13 @@ class MainActivity : Activity() {
         val automatic = if (AutoCollectionSettings.isEnabled(this)) "已启用" else "未启用"
         val online = if (AutoCollectionSettings.onlinePlaceEnrichmentEnabled(this)) "已启用（新地点低频请求）" else "未启用"
         status.text = "自动采集：$automatic\n后台位置：$background\n在线地点补全：$online\n导出文件夹：$folder\n日历：$calendar    使用情况访问：$usage\n精确位置：$location"
+        pairingStatus.text = PairingManager.status(this)
+        if (PairingManager.isPaired(this)) {
+            val expectedDevice = PairingManager.pairedWindowsDeviceId(this)
+            PairingManager.queryLiveStatus(this) { text ->
+                if (PairingManager.pairedWindowsDeviceId(this) == expectedDevice) pairingStatus.text = text
+            }
+        }
         synchronizingToggles = true
         automaticToggle?.isChecked = AutoCollectionSettings.isEnabled(this)
         backgroundToggle?.isChecked = AutoCollectionSettings.backgroundLocationEnabled(this)
@@ -181,7 +212,7 @@ class MainActivity : Activity() {
     }
 
     private fun enableAutomatic() {
-        if (outputTreeUri() == null) {
+        if (!ContextOutput.hasOutputTarget(this)) {
             toast("请先选择 SELENE 导出文件夹")
             automaticToggle?.isChecked = false
             return
@@ -283,6 +314,70 @@ class MainActivity : Activity() {
 
     private fun outputTreeUri(): Uri? = preferences.getString(outputTreeKey, null)?.let(Uri::parse)
 
+    private fun scanPairingCode() {
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt("扫描 Windows SELENE 配对二维码")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun enterPairingCode() {
+        val input = EditText(this).apply {
+            hint = "粘贴 selene-pair:v1:... 配对码"
+            minLines = 4
+            setPadding(20, 12, 20, 12)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("输入 Windows 配对码")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("配对") { _, _ -> pairWithCode(input.text.toString()) }
+            .show()
+    }
+
+    private fun pairWithCode(code: String) {
+        toast("正在连接 Windows 配对端…")
+        pairingStatus.text = "正在启动同步核心并连接 Windows…"
+        PairingManager.pair(this, code) { result ->
+            result.onSuccess {
+                AutoCollectionSettings.setEnabled(this, true)
+                AutoCollectionScheduler.start(this)
+                toast("Windows 配对成功，后续会自动采集并同步")
+                updateStatus()
+            }
+                .onFailure {
+                    val message = it.message ?: "配对码无效"
+                    updateStatus()
+                    pairingStatus.text = "配对失败：$message"
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Windows 配对失败")
+                        .setMessage(message)
+                        .setPositiveButton("确定", null)
+                        .show()
+                }
+            syncMovementTracking()
+        }
+    }
+
+    private fun resetPairing() {
+        if (!PairingManager.isPaired(this)) {
+            toast("当前没有已保存的 Windows 配对")
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("解除 Windows 配对？")
+            .setMessage("只会移除远程信任关系并停止同步，不会删除本机已有快照。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("解除") { _, _ ->
+                PairingManager.reset(this)
+                updateStatus()
+                syncMovementTracking()
+            }
+            .show()
+    }
+
     private fun chooseOutputFolder() {
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
@@ -291,6 +386,11 @@ class MainActivity : Activity() {
 
     @Deprecated("Platform activity-result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val scanResult: IntentResult? = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scanResult != null) {
+            if (!scanResult.contents.isNullOrBlank()) pairWithCode(scanResult.contents)
+            return
+        }
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != requestOutputTree || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
@@ -345,7 +445,7 @@ class MainActivity : Activity() {
             hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         val shouldRun = AutoCollectionSettings.isEnabled(this) &&
             AutoCollectionSettings.backgroundLocationEnabled(this) &&
-            outputTreeUri() != null &&
+            ContextOutput.hasOutputTarget(this) &&
             hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
             backgroundPermissionGranted
         if (shouldRun) {

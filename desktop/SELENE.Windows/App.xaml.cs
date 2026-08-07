@@ -46,7 +46,7 @@ public partial class App : System.Windows.Application
         trayIcon = new Forms.NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "SELENE",
+            Text = "SELENE Windows 0.5.2",
             Visible = true,
             ContextMenuStrip = menu,
         };

@@ -24,7 +24,7 @@ The content file conforms to `selene-context-events/v1`:
   "generatedAt": "2026-08-06T18:54:39.123Z",
   "producer": {
     "name": "SELENE",
-    "version": "0.3.0",
+    "version": "0.5.2",
     "layout": "immutable-snapshot-v1"
   },
   "events": []

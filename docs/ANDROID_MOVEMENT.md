@@ -2,14 +2,14 @@
 
 ## Scope
 
-Android SELENE 0.3.0 records local, non-text timeline context. Its optional movement collector records confirmed continuous travel, sampled precise coordinates, approximate speed, and distance. It covers a walk that begins and ends between hourly WorkManager runs.
+Android SELENE 0.5.2 records local, non-text timeline context. Its optional movement collector records confirmed continuous travel, sampled precise coordinates, approximate speed, and distance. It covers a walk that begins and ends between hourly WorkManager runs.
 
-Data stays in the Android document-tree export folder selected by the user. SELENE does not upload it, inspect chat databases, read notification text, record calls or SMS, capture screenshots, read keyboard input, or access other applications' private databases.
+Before pairing, data stays in the Android document-tree export folder selected by the user. After Windows P2P pairing, it is written to private app storage and sent end-to-end by the embedded Syncthing core. SELENE does not inspect chat databases, read notification text, record calls or SMS, capture screenshots, read keyboard input, or access other applications' private databases.
 
 ## Enable Tracking
 
-1. Install SELENE 0.3.0 or newer and open it once.
-2. Select a SELENE export parent folder with Android's system folder picker.
+1. Install SELENE 0.5.2 or newer and open it once.
+2. Scan the Windows one-use pairing code, or select an export parent with Android's system folder picker.
 3. Enable **Automatic local collection**.
 4. Enable **Allow background continuous movement tracking and approximate speed**.
 5. Grant precise location. On Android 10 and newer, choose **Allow all the time** for Location in the system app permission page.

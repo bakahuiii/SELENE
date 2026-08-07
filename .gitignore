@@ -10,6 +10,7 @@ desktop/**/obj/
 releases/**/staging/
 releases/**/published/
 releases/**/artifacts/
+releases/preview-*/
 *.apk
 *.zip
 *.iml

@@ -3,7 +3,7 @@
 [English](DEVELOPER_GUIDE.md) | [简体中文](DEVELOPER_GUIDE.zh-CN.md)
 
 This guide is for developers changing SELENE or its THEIA hand-off. It
-describes the `0.3.0` codebase, not an aspirational design. Read it before
+describes the `0.5.2` codebase, not an aspirational design. Read it before
 adding a signal, changing movement detection, altering the export schema, or
 publishing a release.
 
@@ -12,7 +12,8 @@ publishing a release.
 SELENE is a local, standalone timeline collector with two independent clients:
 
 - Android collects selected phone context and optional continuous movement.
-- Windows collects coarse desktop activity, idle, power, and network state.
+- Windows collects user-selected desktop activity, idle, power, and network
+  state; sensitive window, path, and browser metadata is opt-in.
 
 It is deliberately **not** a THEIA plugin, a cloud service, or a database
 manager. Each client writes new immutable files below a user-selected export
@@ -41,6 +42,8 @@ Read the documents in this order when joining the project:
 4. [THEIA SELENE event contract](https://github.com/bakahuiii/THEIA/blob/main/docs/SELENE_EVENTS.md)
    before modifying events that THEIA imports.
 5. [RELEASE_PROCESS.md](RELEASE_PROCESS.md) before publishing binaries.
+6. [P2P_SYNC.md](P2P_SYNC.md) and
+   [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) before changing remote sync.
 
 ## 3. Repository Map
 
@@ -49,11 +52,13 @@ Read the documents in this order when joining the project:
 | Android configuration | `app/src/main/.../MainActivity.kt`, `AutoCollectionSettings.kt` | Settings screen, Android permission sequence, collection gates, WorkManager schedule. |
 | Android periodic collectors | `AutoContextWorker.kt`, `PlaceTagger.kt`, `OnlinePlaceEnricher.kt` | Hourly-ish non-continuous signals and a fresh-location fallback. |
 | Android movement | `MovementTrackingService.kt` | Foreground location service, filtering, movement state machine, batches, summary event. |
-| Android output | `ContextOutput.kt` | Android Storage Access Framework (SAF) writes and local-offset timestamps. |
+| Android output | `ContextOutput.kt` | SAF or private sync-root writes, atomic publication, and local-offset timestamps. |
+| Android P2P | `SyncthingService.kt`, `SyncthingClient.kt`, `PairingCode.kt`, `PairingManager.kt` | Embedded-core lifecycle, loopback REST/CLI, pairing validation, and enrollment. |
 | Windows UI | `desktop/SELENE.Windows/MainWindow.xaml.cs` | Tray-window lifecycle, timers, settings binding, capture feedback. |
 | Windows capture | `Core/DesktopCollector.cs`, `ForegroundSessionTracker.cs`, `SystemSnapshotCollector.cs` | Signal collection, foreground session accounting, power/network/idle values. |
 | Windows output | `Core/SeleneProtocol.cs` | Event records, compact JSON, unique immutable snapshot allocation. |
 | Windows local state | `Core/SettingsStore.cs`, `AppLogger.cs`, `WindowsStartup.cs` | Settings, diagnostic log, optional current-user startup entry. |
+| Windows P2P | `Core/SyncthingPairingService.cs` | Syncthing preparation, QR payload, pinned enrollment, and device/folder configuration. |
 | Windows regression test | `desktop/SELENE.Windows.ContractTests/Program.cs` | Immutable-directory and byte-preservation contract check. |
 | Release tooling | `tools/prepare-release.ps1` | Rebuild, test, package, validate, and checksum release artifacts. |
 | THEIA consumer | `THEIA/src/lib/contextEvents.ts`, `THEIA/src/lib/importer.ts` | Envelope validation, event normalization, deduplication, and model-safe projection. |
@@ -68,8 +73,12 @@ flowchart LR
   B --> F["Immutable snapshot writer"]
   C --> F
   E --> F
-  F --> G["Selected export directory\nSELENE-v1-...Z/context-events.json"]
-  G --> H["THEIA file or directory import"]
+  F --> G{"Output target"}
+  G --> G1["SAF export directory"]
+  G --> G2["Private selene-sync"]
+  G2 --> G3["Syncthing P2P to Windows Inbox"]
+  G1 --> H["THEIA file or directory import"]
+  G3 --> H
   H --> I["Envelope validation and normalization"]
   I --> J["Local context-event store"]
   J --> K["Model-safe temporal projection"]
@@ -99,7 +108,7 @@ timezone changes. JSON timestamps use the operating system timezone and ISO
   "generatedAt": "2026-08-07T11:20:00.123+08:00",
   "producer": {
     "name": "SELENE",
-    "version": "0.3.0",
+    "version": "0.5.2",
     "layout": "immutable-snapshot-v1"
   },
   "events": []
@@ -163,7 +172,7 @@ movement service only when all of these are true:
 
 1. Automatic collection is enabled.
 2. The background-movement setting is enabled.
-3. A SAF export tree URI is present.
+3. A SAF export tree URI is present, or Windows P2P pairing is complete.
 4. Fine location is granted.
 5. On Android 10+, background location is granted.
 
@@ -176,8 +185,9 @@ device, network, and fallback context, not for continuous travel. Stopping the
 scheduler also stops the movement service.
 
 `ContextOutput.writeEvents()` is synchronized because a periodic worker and
-the service can write concurrently. It creates a new SAF directory and a new
-`context-events.json` file for every call.
+the service can write concurrently. Before pairing it uses SAF. After pairing
+it writes under `filesDir/selene-sync`, fsyncs a temporary file, then atomically
+renames it to `context-events.json`. Both modes create new snapshots only.
 
 ### 6.2 Periodic worker versus live movement
 
@@ -277,6 +287,47 @@ walk, a short stop during a walk, stale location delivery, low-accuracy network
 fixes, permission revocation while running, and disabling the feature during a
 confirmed track.
 
+### 6.7 Embedded Syncthing and Android enrollment
+
+`SyncthingPaths` is the single path authority. The executable comes from the
+installed `applicationInfo.nativeLibraryDir`, identity/config lives under
+`noBackupFilesDir/syncthing`, and snapshots live under `filesDir/selene-sync`.
+Never put a development-machine path, external storage path, or GUI API key in
+code, a QR payload, logs, or events.
+
+`SyncthingService` uses the `specialUse` foreground type. It uses the upstream
+Android wrapper's validated `generate` and `serve --no-browser` commands,
+sets the private home, no-upgrade policy, SQLite temporary directory, and
+Android 14 gateway fallback through environment variables, and additionally
+pins the GUI to loopback. Do not add CLI flags that have not been checked
+against the bundled core. The service holds a Wi-Fi multicast lock and retries
+unexpected exits. `BootReceiver` restores only saved pairing and enabled
+collectors. The Android 8+ notification is a platform requirement and must not
+be bypassed in the name of silence.
+
+Initial identity generation and readiness probing each allow up to 120 seconds.
+`SyncthingRuntimeStatus` records the phase, consecutive failures, exit code,
+and sanitized log tail in private preferences. Missing files, unsupported ABIs,
+and execute-permission failures are terminal and must end the wait immediately.
+The pairing error dialog displays the complete cause; do not collapse these
+states back into a generic timeout or a short toast.
+
+`SyncthingClient` connects only to `127.0.0.1:8384` and parses the API key from
+private XML with Android's pull parser. It rejects document type declarations
+without relying on vendor-specific `DocumentBuilderFactory` feature URIs, then
+caches the key for the client lifetime. Pairing adds Windows, creates or
+validates the Send Only folder, then adds its remote folder member. Never expose
+the REST endpoint to the LAN.
+
+`PairingCode.decode()` keeps fixed schema/folder, device-ID, expiry, 64-hex
+certificate SHA-256, and private/link-local HTTPS `/enroll` checks. Hostnames
+and public addresses remain forbidden against QR-driven SSRF. A self-signed
+leaf is trusted only when its digest exactly matches the QR pin.
+
+Android configures locally before returning its ID. Paired state is persisted
+only after a 2xx response; token and endpoints are never persisted. Disconnect
+may remove remote config and paired state, but never snapshots or phone identity.
+
 ## 7. Windows Architecture
 
 ### 7.1 Application lifecycle
@@ -289,7 +340,7 @@ current-user Run entry only for a published executable, never for a debug run.
 `MainWindow` runs two independent timers:
 
 - every 10 seconds, `ForegroundSessionTracker.Observe()` samples the current
-  foreground executable name;
+  foreground executable and only the selected optional metadata;
 - at 5, 15, 30, or 60 minute intervals, `DesktopCollector.CaptureAsync()`
   creates a snapshot when automatic collection and a valid output folder are
   enabled.
@@ -300,8 +351,8 @@ initializes with a valid folder.
 ### 7.2 Collection and consistency
 
 `DesktopCollector` serializes captures with `SemaphoreSlim`. It cuts completed
-foreground sessions, builds screen-time/activity/device/network events, and
-writes them through `ImmutableSnapshotWriter`.
+foreground sessions, builds selected screen-time/activity/device/network events,
+and writes them through `ImmutableSnapshotWriter`.
 
 The ordering matters:
 
@@ -313,7 +364,10 @@ The ordering matters:
 4. If writing fails, `Restore()` requeues the drained sessions in time order;
    the next capture can include them again.
 
-This prevents a failed write from silently losing foreground-session history.
+Pending sessions are checkpointed under `%LOCALAPPDATA%\SELENE` and removed
+only after acknowledgement. This prevents a failed write from silently losing
+foreground-session history, but cannot protect the still-active interval from a
+sudden process termination or power failure.
 Sessions shorter than five seconds are omitted as individual `activity` events
 but remain represented in the aggregate `screen-time` event.
 
@@ -322,7 +376,8 @@ but remain represented in the aggregate `screen-time` event.
 | Event | Values | Notes |
 | --- | --- | --- |
 | `screen-time` | `foregroundSeconds`, `activeAppCount`, `windowSeconds` | One aggregate for the capture window. |
-| `activity` | executable `application`, `durationSeconds`, `detail` | Foreground executable only; no title, URL, arguments, or document name. |
+| `activity` | `application`, `durationSeconds`, `detail`; optional `windowTitle`, `executablePath`, `browserUrl` | Optional fields require explicit settings and are `privacy: "sensitive"`. Browser URL is address-bar best effort only. |
+| `collection-profile` | six enabled/disabled field groups | Every snapshot records the choices used to produce it. |
 | `device` | idle, power, battery values | Current state, not an activity history. |
 | `device` | network availability and coarse transport | A separate network snapshot, also `kind: "device"`. |
 
@@ -338,11 +393,43 @@ timeline or a THEIA input.
 
 ### 7.4 Safe Windows changes
 
-When adding a Windows signal, avoid scraping text from another process. Favor
-coarse scalar state. Update `DesktopCollector`, keep capture serialization, add
+When adding a Windows signal, make it a separate explicit setting, default it
+off if it can contain private text, and include it in `collection-profile`.
+Keep browser support limited to metadata exposed through the current foreground
+window; do not add page-body, form, key, clipboard, notification, chat, or
+credential capture. Update `DesktopCollector`, keep capture serialization, add
 a stable ID, then extend `desktop/SELENE.Windows.ContractTests` if immutable
 output behavior or serialization changes. Do not make the collector a service
 without revisiting privacy disclosure, session isolation, and installer design.
+
+### 7.5 Windows enrollment endpoint
+
+`SyncthingPairingService` belongs to SELENE Windows, not THEIA. It resolves the
+core through `SELENE_SYNCTHING_PATH`, PATH, and the winget package directory;
+installation occurs only after explicit code generation. It reuses an existing
+`selene-inbox-v1`, enforces Receive Only, and sets user-level
+`THEIA_SELENE_INBOX`. All paths come from runtime APIs.
+
+`MainWindow` runs pairing preparation and QRCoder encoding on background tasks.
+The service caches the validated Syncthing path, device ID, and the last five
+minutes of inbox preparation for the current process. `UserEnvironment` first
+compares the user value and writes HKCU `Environment` only when the path changes;
+`WM_SETTINGCHANGE` is a bounded background broadcast. Do not restore an
+unconditional `Environment.SetEnvironmentVariable(..., User)` call: one hung
+top-level window can make that synchronous broadcast take many seconds and
+freeze the WPF UI.
+
+An offer binds an ephemeral port, enumerates private IPv4 endpoints, creates a
+short-lived RSA certificate and 256-bit token, and renders locally with QRCoder.
+The TLS server accepts private-source `POST /enroll` up to 32 KiB. Only after
+schema, folder, device-ID, and constant-time token checks does it add Android
+through the local CLI. Success closes it immediately; five-minute cancellation
+is a hard limit.
+
+Windows Firewall is external enrollment state and must not be bypassed. Manual
+tests cover Private-network allow, Public-network deny, multi-adapter fallback,
+expiry, wrong token, duplicates, an existing folder path, and completion while
+the main window is hidden.
 
 ## 8. THEIA Import and Privacy Boundary
 
@@ -445,7 +532,7 @@ Before merging a behavioral change, answer all of these:
 For a binary release, use:
 
 ```powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
+$env:JAVA_HOME = '<jdk-home>'
 .\tools\prepare-release.ps1 -Version <version>
 ```
 
@@ -459,6 +546,7 @@ downloaded-asset checksum steps. The Android artifact is intentionally named
 
 ## 11. Reference Links
 
+- [One-time P2P pairing](P2P_SYNC.md)
 - [Android movement details](ANDROID_MOVEMENT.md)
 - [Windows collector details](WINDOWS_DESKTOP.md)
 - [Export layout](EXPORT_LAYOUT.md)

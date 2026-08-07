@@ -1,24 +1,76 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Selene.Windows.Core;
 
-public sealed record ForegroundSession(string Application, DateTimeOffset StartAt, DateTimeOffset EndAt)
+public sealed record ForegroundObservation(
+    string Application,
+    string? WindowTitle,
+    string? ExecutablePath,
+    string? BrowserUrl
+);
+
+public sealed record ForegroundSession(
+    Guid Id,
+    ForegroundObservation Observation,
+    DateTimeOffset StartAt,
+    DateTimeOffset EndAt
+)
 {
     public long DurationSeconds => Math.Max(0, (long)(EndAt - StartAt).TotalSeconds);
+
+    public ForegroundSession Sanitize(DesktopCaptureProfile profile) => this with
+    {
+        Observation = Observation with
+        {
+            WindowTitle = profile.WindowTitles ? Observation.WindowTitle : null,
+            ExecutablePath = profile.ExecutablePaths ? Observation.ExecutablePath : null,
+            BrowserUrl = profile.BrowserUrls ? Observation.BrowserUrl : null,
+        },
+    };
 }
 
 public sealed class ForegroundSessionTracker
 {
     private readonly object sync = new();
-    private readonly List<ForegroundSession> completed = [];
+    private readonly List<ForegroundSession> completed;
+    private readonly List<ForegroundSession> inFlight = [];
+    private readonly ForegroundSessionStore store;
     private readonly string ownProcessName = Process.GetCurrentProcess().ProcessName;
-    private string? activeApplication;
+    private ForegroundObservation? activeObservation;
     private DateTimeOffset activeSince;
+    private DesktopCaptureProfile profile = DesktopCaptureProfile.Default;
 
-    public void Observe(DateTimeOffset? observedAt = null)
+    public ForegroundSessionTracker(ForegroundSessionStore? store = null)
     {
-        lock (sync) ObserveCore(observedAt ?? DateTimeOffset.Now);
+        this.store = store ?? new ForegroundSessionStore();
+        completed = this.store.Load().ToList();
+    }
+
+    public void Observe(DesktopCaptureProfile captureProfile, DateTimeOffset? observedAt = null)
+    {
+        lock (sync)
+        {
+            var now = observedAt ?? DateTimeOffset.Now;
+            if (!Equals(profile, captureProfile))
+            {
+                ObserveCore(now);
+                profile = captureProfile.Normalize();
+                if (!profile.ForegroundApplications)
+                {
+                    completed.Clear();
+                }
+                else
+                {
+                    for (var index = 0; index < completed.Count; index += 1)
+                    {
+                        completed[index] = completed[index].Sanitize(profile);
+                    }
+                }
+                PersistPending();
+            }
+            ObserveCore(now);
+        }
     }
 
     public IReadOnlyList<ForegroundSession> CutAndDrain(DateTimeOffset now)
@@ -26,14 +78,23 @@ public sealed class ForegroundSessionTracker
         lock (sync)
         {
             ObserveCore(now);
-            if (!string.IsNullOrWhiteSpace(activeApplication) && now > activeSince)
-            {
-                completed.Add(new ForegroundSession(activeApplication, activeSince, now));
-                activeSince = now;
-            }
+            CloseActive(now);
+            if (completed.Count == 0) return [];
             var output = completed.ToArray();
             completed.Clear();
+            inFlight.AddRange(output);
             return output;
+        }
+    }
+
+    /** Clears only sessions whose immutable snapshot has been written and flushed. */
+    public void Acknowledge(IEnumerable<ForegroundSession> sessions)
+    {
+        lock (sync)
+        {
+            var ids = sessions.Select(item => item.Id).ToHashSet();
+            inFlight.RemoveAll(item => ids.Contains(item.Id));
+            PersistPending();
         }
     }
 
@@ -42,34 +103,42 @@ public sealed class ForegroundSessionTracker
     {
         lock (sync)
         {
-            completed.InsertRange(0, sessions);
+            var ids = sessions.Select(item => item.Id).ToHashSet();
+            var failed = inFlight.Where(item => ids.Contains(item.Id)).ToArray();
+            inFlight.RemoveAll(item => ids.Contains(item.Id));
+            completed.InsertRange(0, failed);
             completed.Sort((left, right) => left.StartAt.CompareTo(right.StartAt));
+            PersistPending();
         }
     }
 
     private void ObserveCore(DateTimeOffset now)
     {
-        var application = CurrentForegroundApplication();
-        if (string.Equals(application, activeApplication, StringComparison.OrdinalIgnoreCase)) return;
+        var observation = CurrentForegroundObservation();
+        if (Equals(observation, activeObservation)) return;
         CloseActive(now);
-        if (!string.IsNullOrWhiteSpace(application))
+        if (observation is not null)
         {
-            activeApplication = application;
+            activeObservation = observation;
             activeSince = now;
         }
     }
 
     private void CloseActive(DateTimeOffset now)
     {
-        if (!string.IsNullOrWhiteSpace(activeApplication) && now > activeSince)
+        if (activeObservation is not null && now > activeSince)
         {
-            completed.Add(new ForegroundSession(activeApplication, activeSince, now));
+            completed.Add(new ForegroundSession(Guid.NewGuid(), activeObservation, activeSince, now));
+            PersistPending();
         }
-        activeApplication = null;
+        activeObservation = null;
     }
 
-    private string? CurrentForegroundApplication()
+    private void PersistPending() => store.Save(completed.Concat(inFlight));
+
+    private ForegroundObservation? CurrentForegroundObservation()
     {
+        if (!profile.ForegroundApplications) return null;
         try
         {
             var window = NativeMethods.GetForegroundWindow();
@@ -79,7 +148,35 @@ public sealed class ForegroundSessionTracker
             using var process = Process.GetProcessById((int)processId);
             var name = process.ProcessName.Trim();
             if (string.IsNullOrWhiteSpace(name) || string.Equals(name, ownProcessName, StringComparison.OrdinalIgnoreCase)) return null;
-            return name.Length > 96 ? name[..96] : name;
+            if (name.Length > 96) name = name[..96];
+            var title = profile.WindowTitles ? WindowTitle(window) : null;
+            var executablePath = profile.ExecutablePaths ? ExecutablePath(process) : null;
+            var browserUrl = profile.BrowserUrls ? BrowserPageReader.TryReadAddress(window, name) : null;
+            return new ForegroundObservation(name, title, executablePath, browserUrl);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? WindowTitle(IntPtr window)
+    {
+        var length = NativeMethods.GetWindowTextLength(window);
+        if (length <= 0) return null;
+        var buffer = new StringBuilder(Math.Min(length + 1, 2_049));
+        NativeMethods.GetWindowText(window, buffer, buffer.Capacity);
+        var title = buffer.ToString().Trim();
+        return string.IsNullOrWhiteSpace(title) ? null : title;
+    }
+
+    private static string? ExecutablePath(Process process)
+    {
+        try
+        {
+            var path = process.MainModule?.FileName?.Trim();
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            return path.Length <= 2_048 ? path : path[..2_048];
         }
         catch
         {

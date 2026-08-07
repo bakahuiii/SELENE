@@ -19,7 +19,7 @@ SELENE-v1-<UTC timestamp>/context-events.json
   "generatedAt": "2026-08-06T22:54:39.123+08:00",
   "producer": {
     "name": "SELENE",
-    "version": "0.3.0",
+    "version": "0.5.2",
     "layout": "immutable-snapshot-v1"
   },
   "events": []

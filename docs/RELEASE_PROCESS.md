@@ -11,6 +11,9 @@ and Windows assembly version before packaging both platforms.
 - .NET SDK 9.0.
 - JDK 17.
 - The project-local Android SDK and Gradle distribution under `.android-build`.
+- The two ARM native cores recorded by
+  `app/src/main/jniLibs/SYNCTHING_PROVENANCE.json` and
+  [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 The script uses the project-local Android toolchain so it does not depend on a
 machine-wide Android Studio installation. It does not download dependencies
@@ -22,31 +25,32 @@ proxy in the shell before invoking it.
 From the repository root, run:
 
 ~~~powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-.\tools\prepare-release.ps1 -Version 0.3.0
+$env:JAVA_HOME = '<jdk-home>'
+.\tools\prepare-release.ps1 -Version 0.5.2
 ~~~
 
 Pass `-Version` explicitly. The command refuses to reuse its matching
 `releases\v<version>` directory. This protects an earlier local
 staging directory from accidental overwrite. It performs the following checks:
 
-1. Android debug lint and APK build.
-2. Windows Release build.
-3. Windows immutable-snapshot contract test.
-4. Windows self-contained, single-file x64 publish.
-5. Android manifest, ZIP alignment, and signature validation.
-6. Windows ZIP inventory validation.
-7. SHA-256 checksum generation.
+1. Native Syncthing size and SHA-256 verification against the provenance manifest.
+2. Android debug lint and APK build.
+3. Windows Release build.
+4. Windows immutable-snapshot contract test.
+5. Windows self-contained, single-file x64 publish.
+6. Android manifest, ZIP alignment, and signature validation.
+7. Windows ZIP inventory validation.
+8. SHA-256 checksum generation.
 
 Artifacts are placed here:
 
 ```text
 releases/
-  v0.3.0/
+  v0.5.2/
     published/windows-x64/       # unpacked self-contained Windows output
     artifacts/
-      SELENE-0.3.0-windows-x64.zip
-      SELENE-0.3.0-android-debug.apk
+      SELENE-0.5.2-windows-x64.zip
+      SELENE-0.5.2-android-debug.apk
       SHA256SUMS.txt
 ```
 
@@ -70,6 +74,8 @@ repository. Its name states that fact explicitly.
    precise location and "Allow all the time" before a confirmed track can be
    collected. Notification permission makes the foreground-service state
    visible but does not grant location access.
+8. State the two supported ARM ABIs and the pinned Syncthing-Fork/Syncthing
+   revisions, including the MPL-2.0 source offer in `THIRD_PARTY_NOTICES.md`.
 
 Use the release notes to identify the supported schema
 `selene-context-events/v1`, so users know that THEIA imports only SELENE's

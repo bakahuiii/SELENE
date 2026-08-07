@@ -330,7 +330,7 @@ class MovementTrackingService : Service() {
         flushedAt = System.currentTimeMillis()
         ioExecutor.execute {
             try {
-                if (ContextOutput.outputTreeUri(applicationContext) != null) ContextOutput.writeEvents(applicationContext, batch)
+                if (ContextOutput.hasOutputTarget(applicationContext)) ContextOutput.writeEvents(applicationContext, batch)
             } catch (_: Exception) {
                 // Keep the batch for the next flush if a transient SAF error occurs.
                 synchronized(eventLock) { pendingEvents.addAll(0, batch) }
@@ -340,7 +340,7 @@ class MovementTrackingService : Service() {
 
     private fun shouldRun(): Boolean = AutoCollectionSettings.isEnabled(this) &&
         AutoCollectionSettings.backgroundLocationEnabled(this) &&
-        ContextOutput.outputTreeUri(this) != null &&
+        ContextOutput.hasOutputTarget(this) &&
         checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
         (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)
 

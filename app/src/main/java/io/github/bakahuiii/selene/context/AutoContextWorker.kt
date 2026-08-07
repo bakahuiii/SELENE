@@ -36,7 +36,7 @@ class AutoContextWorker(appContext: Context, params: WorkerParameters) : Worker(
 
     override fun doWork(): Result {
         val context = applicationContext
-        if (!AutoCollectionSettings.isEnabled(context) || ContextOutput.outputTreeUri(context) == null) return Result.success()
+        if (!AutoCollectionSettings.isEnabled(context) || !ContextOutput.hasOutputTarget(context)) return Result.success()
         val now = System.currentTimeMillis()
         val zone = ZoneId.systemDefault()
         val dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()

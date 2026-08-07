@@ -8,6 +8,8 @@
 - .NET SDK 9.0。
 - JDK 17。
 - 项目内 `.android-build` 下的 Android SDK 和 Gradle 发行版。
+- `app/src/main/jniLibs/SYNCTHING_PROVENANCE.json` 中记录的两份 ARM 原生核心及
+  [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 脚本使用项目内 Android 工具链，不依赖机器范围的 Android Studio。本地 Gradle 缓存已就绪时不会下载依赖；确需下载时，先在 shell 中设置本地代理再执行脚本。
 
@@ -16,29 +18,30 @@
 在仓库根目录执行：
 
 ```powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-.\tools\prepare-release.ps1 -Version 0.3.0
+$env:JAVA_HOME = '<jdk-home>'
+.\tools\prepare-release.ps1 -Version 0.5.2
 ```
 
 请显式传入 `-Version`。脚本拒绝重复使用对应的 `releases\v<version>` 目录，避免意外覆盖此前的本地发布暂存目录。它会依次执行：
 
-1. Android debug lint 与 APK 构建。
-2. Windows Release 构建。
-3. Windows 不可变快照契约测试。
-4. Windows x64 单文件自包含发布。
-5. Android 清单、ZIP 对齐和签名校验。
-6. Windows ZIP 内容校验。
-7. SHA-256 校验和生成。
+1. 按 provenance manifest 校验 Syncthing 原生文件大小与 SHA-256。
+2. Android debug lint 与 APK 构建。
+3. Windows Release 构建。
+4. Windows 不可变快照契约测试。
+5. Windows x64 单文件自包含发布。
+6. Android 清单、ZIP 对齐和签名校验。
+7. Windows ZIP 内容校验。
+8. SHA-256 校验和生成。
 
 产物目录如下：
 
 ```text
 releases/
-  v0.3.0/
+  v0.5.2/
     published/windows-x64/
     artifacts/
-      SELENE-0.3.0-windows-x64.zip
-      SELENE-0.3.0-android-debug.apk
+      SELENE-0.5.2-windows-x64.zip
+      SELENE-0.5.2-android-debug.apk
       SHA256SUMS.txt
 ```
 
@@ -53,5 +56,7 @@ releases/
 5. 在发布说明中重申隐私边界：SELENE 只采集文档说明的本地非文本信号，不采集聊天内容、键盘、剪贴板、截图、通知正文、短信、通话、支付记录或其他应用数据库。
 6. 发布前下载一个附件，并用随附校验和文件验证其 SHA-256。
 7. Android 包含运动记录时，说明用户必须选择精确位置并设置为“始终允许”，系统才会采集已确认行程。通知权限只负责显示前台服务状态，不授予位置权限。
+8. 说明 Android 只支持两个 ARM ABI，内置核心来源于固定 Syncthing-Fork/Syncthing
+   提交，并附上 `THIRD_PARTY_NOTICES.md` 中的 MPL-2.0 源码获取信息。
 
 发布说明还应写明支持的 `selene-context-events/v1` schema，使用户知道 THEIA 只导入 SELENE 的严格不可变快照信封。
